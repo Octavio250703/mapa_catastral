@@ -109,27 +109,11 @@
       color: #555;
       width: 40%;
     }
-    #toggleSidebarBtn {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      background: transparent;
-      color: #444;
-      border: none;
-      font-size: 20px;
-      cursor: pointer;
-      z-index: 11;
-  }
-
-  #sidebar h2 {
-    margin-top: 30px; /* separa el título del botón */
-  }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div id="sidebar">
-    <button id="toggleSidebarBtn">✖</button>
     <h2>Gestor de Parcelas</h2>
     <label for="searchInput">Buscar por Catastro:</label>
     <input type="text" id="searchInput" placeholder="Ej: 252" />
@@ -363,33 +347,6 @@
           map.setFilter('selected-parcela', ['==', 'VINCULACIO', id]);
         };
         resultsList.appendChild(li);
-      });
-    });
-    const sidebar = document.getElementById('sidebar');
-    const toggleBtn = document.getElementById('toggleSidebarBtn');
-
-    toggleBtn.addEventListener('click', () => {
-      sidebar.style.display = 'none';
-
-      const reopenBtn = document.createElement('button');
-      reopenBtn.id = 'reopenSidebarBtn';
-      reopenBtn.textContent = 'Mostrar Panel';
-      reopenBtn.style.position = 'absolute';
-      reopenBtn.style.top = '20px';
-      reopenBtn.style.left = '20px';
-      reopenBtn.style.zIndex = 20;
-      reopenBtn.style.padding = '10px';
-      reopenBtn.style.backgroundColor = '#0066cc';
-      reopenBtn.style.color = 'white';
-      reopenBtn.style.border = 'none';
-      reopenBtn.style.borderRadius = '6px';
-      reopenBtn.style.cursor = 'pointer';
-
-      document.body.appendChild(reopenBtn);
-
-      reopenBtn.addEventListener('click', () => {
-        sidebar.style.display = 'block';
-        reopenBtn.remove();
       });
     });
   </script>
