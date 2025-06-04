@@ -188,7 +188,7 @@
       for (const [id, color] of Object.entries(parcelColors)) {
         expression.push(id, color);
       }
-      expression.push('#ff0000');
+      expression.push('#00aaff');
       map.setPaintProperty('parcelas-layer', 'fill-color', expression);
     }
 
@@ -197,7 +197,7 @@
       snapshot.forEach(doc => {
         const data = doc.data();
         const id = doc.id;
-        parcelColors[id] = data.color || '#ff0000';
+        parcelColors[id] = data.color || '#00aaff';
         parcelObservations[id] = data.observacion || '';
         parcelExtras[id] = {
           superficie: data.superficie || '',
@@ -245,7 +245,7 @@
           'source-layer': 'archivo-2xi9qg',
           paint: {
             'fill-color': ['match', ['get', 'VINCULACIO'], '', '#ff0000', '#ff0000'],
-            'fill-opacity': 0.5
+            'fill-opacity': 0.3
           }
         });
 
@@ -255,7 +255,7 @@
           source: 'parcelas',
           'source-layer': 'archivo-2xi9qg',
           paint: {
-            'line-color': '#ffcc00',
+            'line-color': '#00aaff',
             'line-width': 3
           },
           filter: ['==', 'VINCULACIO', '']
