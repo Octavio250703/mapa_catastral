@@ -10,6 +10,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <!-- Añadimos Font Awesome para los iconos -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
     body {
       margin: 0;
@@ -34,6 +36,11 @@
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       z-index: 10;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    #sidebar.collapsed {
+      transform: translateX(-420px);
+      opacity: 0;
     }
     #sidebar h2 {
       margin: 0 0 10px;
@@ -109,16 +116,79 @@
       color: #555;
       width: 40%;
     }
+    .hidden {
+      display: none !important;
+    }
+    #toggleSidebarBtn {
+      position: absolute;
+      z-index: 20;
+      background: #0066cc;
+      color: white;
+      border: none;
+      width: auto;
+      padding: 10px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      top: 20px;
+      left: 20px;
+    }
+    #toggleSidebarBtn.sidebar-collapsed {
+      left: 20px;
+    }
+    #toggleSidebarBtn i {
+      transition: transform 0.3s ease;
+    }
+    #toggleSidebarBtn.sidebar-collapsed i {
+      transform: rotate(180deg);
+    }
   </style>
 </head>
 <body>
+  
   <div id="map"></div>
+  <button id="toggleSidebarBtn">
+    <i class="fas fa-chevron-left"></i> <span id="toggleBtnText">Ocultar Panel</span>
+  </button>
   <div id="sidebar">
-    <h2>Gestor de Parcelas</h2>
+    <h2>.</h2>
     <label for="searchInput">Buscar por Catastro:</label>
     <input type="text" id="searchInput" placeholder="Ej: 252" />
     <button id="searchBtn">Buscar</button>
     <ul id="searchResults"></ul>
+
+    <label for="departamentoSelect">Departamento:</label>
+    <select id="departamentoSelect">
+      <option value="">Seleccione un departamento</option>
+      <option value="Anta">Anta</option>
+      <option value="Cachi">Cachi</option>
+      <option value="Cafayate">Cafayate</option>
+      <option value="Capital">Capital</option>
+      <option value="Cerrillos">Cerrillos</option>
+      <option value="Chicoana">Chicoana</option>
+      <option value="General Guemes">General Guemes</option>
+      <option value="General San Martin">General San Martin</option>
+      <option value="Guachipas">Guachipas</option>
+      <option value="Iruya">Iruya</option>
+      <option value="La Caldera">La Caldera</option>
+      <option value="La Candelaria">La Candelaria</option>
+      <option value="La Poma">La Poma</option>
+      <option value="La Viña">La Viña</option>
+      <option value="Los Andes">Los Andes</option>
+      <option value="Metan">Metan</option>
+      <option value="Molinos">Molinos</option>
+      <option value="Oran">Oran</option>
+      <option value="Rivadavia">Rivadavia</option>
+      <option value="Rosario de la Frontera">Rosario de la Frontera</option>
+      <option value="Rosario de Lerma">Rosario de Lerma</option>
+      <option value="San Carlos">San Carlos</option>
+      <option value="Santa Victoria">Santa Victoria</option>
+    </select>
 
     <label for="mapStyle">Estilo de Mapa:</label>
     <select id="mapStyle">
@@ -155,6 +225,33 @@
     <button id="saveBtn">Guardar cambios</button>
   </div>
   <script>
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('toggleSidebarBtn');
+    const toggleBtnText = document.getElementById('toggleBtnText');
+
+    // Función para alternar la visibilidad de la barra lateral
+    function toggleSidebar() {
+      sidebar.classList.toggle('collapsed');
+      toggleBtn.classList.toggle('sidebar-collapsed');
+      
+      if (sidebar.classList.contains('collapsed')) {
+        toggleBtnText.textContent = 'Mostrar Panel';
+      } else {
+        toggleBtnText.textContent = 'Ocultar Panel';
+      }
+    }
+
+    // Evento para el botón de alternar
+    toggleBtn.addEventListener('click', toggleSidebar);
+
+    // Añadir atajo de teclado (Ctrl+B) para alternar la barra lateral
+    document.addEventListener('keydown', function(event) {
+      if (event.ctrlKey && event.key === 'b') {
+        event.preventDefault(); // Prevenir comportamiento predeterminado
+        toggleSidebar();
+      }
+    });
+
     const firebaseConfig = {
       apiKey: "AIzaSyCoxbm_jXwcC3bRHC7uYcqKmKO-BA7zBy0",
       authDomain: "mapasaltaparcelas-dfeb0.firebaseapp.com",
@@ -219,7 +316,7 @@
 
     async function initMap(styleURL) {
       const center = map ? map.getCenter() : [-65.4, -24.8];
-      const zoom = map ? map.getZoom() : 13;
+      const zoom = map ? map.getZoom() : 15;
 
       if (map) map.remove();
 
@@ -277,6 +374,11 @@
           document.getElementById('saveBtn').dataset.currentId = id;
 
           map.setFilter('selected-parcela', ['==', 'VINCULACIO', id]);
+          
+          // Si la barra lateral está oculta, mostrarla al seleccionar una parcela
+          if (sidebar.classList.contains('collapsed')) {
+            toggleSidebar();
+          }
         });
 
         map.on('mouseenter', 'parcelas-layer', () => {
@@ -313,12 +415,13 @@
       initMap(newStyle);
     });
 
-    document.getElementById('searchBtn').addEventListener('click', async () => {
-      const value = document.getElementById('searchInput').value.trim();
+    // Reemplaza el searchBtn existente por este
+    function runSearch() {
+      if (!pendingSearch) return;
+      const value = pendingSearch;
+      pendingSearch = null;
       const resultsList = document.getElementById('searchResults');
       resultsList.innerHTML = '';
-
-      if (!value) return;
 
       const features = map.querySourceFeatures('parcelas', {
         sourceLayer: 'archivo-2xi9qg'
@@ -344,11 +447,67 @@
         li.onclick = () => {
           const center = turf.center(feature).geometry.coordinates;
           map.flyTo({ center: center, zoom: 17 });
-          map.fire('click', { point: map.project(center) });
           map.setFilter('selected-parcela', ['==', 'VINCULACIO', id]);
+          
+          // Si la barra lateral está oculta, mostrarla al hacer clic en un resultado
+          if (sidebar.classList.contains('collapsed')) {
+            toggleSidebar();
+          }
         };
         resultsList.appendChild(li);
       });
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', () => {
+      const value = document.getElementById('searchInput').value.trim();
+      if (!value) return;
+      pendingSearch = value;
+      map.once('moveend', runSearch);
+      if (!map.isMoving()) runSearch();
+    });
+    
+    // Permitir búsqueda al presionar Enter en el campo de búsqueda
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('searchBtn').click();
+      }
+    });
+    
+    const deptoCoords = {
+    "Anta": { center: [-64.12472, -24.11361], zoom: 9 },
+    "Cachi": { center: [-66.16519, -25.12033], zoom: 11 },
+    "Cafayate": { center: [-65.97605, -26.07308], zoom: 11 },
+    "Capital": { center: [-65.41056, -24.78917], zoom: 13 },
+    "Cerrillos": { center: [-65.48722, -24.89583], zoom: 13 },
+    "Chicoana": { center: [-65.5344, -25.1046], zoom: 12 },
+    "General Guemes": { center: [-65.05, -24.66667], zoom: 11 },
+    "General San Martin": { center: [-63.83333, -22.5], zoom: 9 },
+    "Guachipas": { center: [-65.5, -25.3], zoom: 12 },
+    "Iruya": { center: [-65.2, -22.8], zoom: 11 },
+    "La Caldera": { center: [-65.3, -24.6], zoom: 12 },
+    "La Candelaria": { center: [-64.1, -25.5], zoom: 11 },
+    "La Poma": { center: [-66.15, -24.7], zoom: 11 },
+    "La Viña": { center: [-65.41667, -25.0], zoom: 12 },
+    "Los Andes": { center: [-67.17, -24.2], zoom: 9 },
+    "Metan": { center: [-64.98, -25.34], zoom: 11 },
+    "Molinos": { center: [-66.32, -25.42], zoom: 11 },
+    "Oran": { center: [-64.34, -23.1], zoom: 10 },
+    "Rivadavia": { center: [-62.93, -24.28], zoom: 8 },
+    "Rosario de la Frontera": { center: [-64.96, -25.8], zoom: 11 },
+    "Rosario de Lerma": { center: [-65.6, -24.94], zoom: 12 },
+    "San Carlos": { center: [-66.03, -26.06], zoom: 11 },
+    "Santa Victoria": { center: [-64.9, -22.53], zoom: 10 }
+  };
+
+    let pendingSearch = null;
+
+    // Departamento selector
+    document.getElementById('departamentoSelect').addEventListener('change', (e) => {
+      const depto = e.target.value;
+      if (deptoCoords[depto]) {
+        const { center, zoom } = deptoCoords[depto];
+        map.flyTo({ center, zoom });
+      }
     });
   </script>
 </body>
