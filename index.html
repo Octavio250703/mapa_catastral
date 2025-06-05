@@ -148,9 +148,66 @@
       transform: rotate(180deg);
     }
   </style>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 </head>
 <body>
-  
+  <div id="loginContainer" style="
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: linear-gradient(135deg, #f0f4f8, #d9e2ec);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    font-family: 'Inter', sans-serif;
+  ">
+    <div style="
+      max-width: 360px;
+      width: 100%;
+      padding: 30px;
+      border-radius: 12px;
+      background-color: white;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      text-align: center;
+    ">
+      <h2 style="margin-bottom: 8px; color: #003366;">Caja de Abogados de Salta</h2>
+      <p style="margin-bottom: 24px; color: #444; font-size: 15px;">Accedé con tu cuenta registrada</p>
+      
+      <input type="email" id="emailInput" placeholder="Correo electrónico" style="
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 12px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+      " />
+      
+      <input type="password" id="passwordInput" placeholder="Contraseña" style="
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 16px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+      " />
+      
+      <button onclick="login()" style="
+        width: 100%;
+        padding: 12px;
+        background-color: #0066cc;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-weight: bold;
+        font-size: 15px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+      ">Ingresar</button>
+      
+      <p id="loginError" style="margin-top: 16px; color: red; font-size: 13px;"></p>
+    </div>
+  </div>
   <div id="map"></div>
   <button id="toggleSidebarBtn">
     <i class="fas fa-chevron-left"></i> <span id="toggleBtnText">Ocultar Panel</span>
@@ -225,43 +282,21 @@
     <button id="saveBtn">Guardar cambios</button>
   </div>
   <script>
-    const sidebar = document.getElementById('sidebar');
-    const toggleBtn = document.getElementById('toggleSidebarBtn');
-    const toggleBtnText = document.getElementById('toggleBtnText');
-
-    // Función para alternar la visibilidad de la barra lateral
-    function toggleSidebar() {
-      sidebar.classList.toggle('collapsed');
-      toggleBtn.classList.toggle('sidebar-collapsed');
-      
-      if (sidebar.classList.contains('collapsed')) {
-        toggleBtnText.textContent = 'Mostrar Panel';
-      } else {
-        toggleBtnText.textContent = 'Ocultar Panel';
-      }
-    }
-
-    // Evento para el botón de alternar
-    toggleBtn.addEventListener('click', toggleSidebar);
-
-    // Añadir atajo de teclado (Ctrl+B) para alternar la barra lateral
-    document.addEventListener('keydown', function(event) {
-      if (event.ctrlKey && event.key === 'b') {
-        event.preventDefault(); // Prevenir comportamiento predeterminado
-        toggleSidebar();
-      }
-    });
 
     const firebaseConfig = {
-      apiKey: "AIzaSyCoxbm_jXwcC3bRHC7uYcqKmKO-BA7zBy0",
-      authDomain: "mapasaltaparcelas-dfeb0.firebaseapp.com",
-      projectId: "mapasaltaparcelas-dfeb0",
-      storageBucket: "mapasaltaparcelas-dfeb0.appspot.com",
-      messagingSenderId: "783736714984",
-      appId: "1:783736714984:web:5839f8049f515cba3d7b5d"
+        apiKey: "AIzaSyCoxbm_jXwcC3bRHC7uYcqKmKO-BA7zBy0",
+        authDomain: "mapasaltaparcelas-dfeb0.firebaseapp.com",
+        projectId: "mapasaltaparcelas-dfeb0",
+        storageBucket: "mapasaltaparcelas-dfeb0.appspot.com",
+        messagingSenderId: "783736714984",
+        appId: "1:783736714984:web:5839f8049f515cba3d7b5d"
     };
 
+    // Inicializa Firebase App PRIMERO
     firebase.initializeApp(firebaseConfig);
+
+    // Ahora sí, inicializa Firebase Authentication y Firestore
+    const auth = firebase.auth();
     const db = firebase.firestore();
 
     mapboxgl.accessToken = 'pk.eyJ1Ijoib2N0YXZpb2dhbHZhbjUiLCJhIjoiY21iZjQ2bG1xMm93MjJxb2tidm84Zzh4cSJ9.-3ZpHXCEbwsf1Gc3NSkibQ';
@@ -270,245 +305,369 @@
     const parcelObservations = {};
     const parcelExtras = {};
     let map;
+    let pendingSearch = null; // Definido aquí para que sea accesible globalmente
+
+    // Obtener elementos del DOM
+    const loginContainer = document.getElementById('loginContainer');
+    const mapElement = document.getElementById('map'); // Asumiendo que tienes un div con id="map" para Mapbox
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('toggleSidebarBtn');
+    const toggleBtnText = document.getElementById('toggleBtnText');
+
+    // Maneja el estado de sesión
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            loginContainer.style.display = 'none';
+            // Asegúrate de que el contenedor del mapa esté visible
+            if (mapElement) {
+                mapElement.style.display = 'block';
+            }
+            // Inicia el mapa solo si hay un usuario logueado
+            initMap('mapbox://styles/mapbox/streets-v11'); 
+        } else {
+            loginContainer.style.display = 'flex';
+            // Asegúrate de que el contenedor del mapa esté oculto si no hay usuario
+            if (mapElement) {
+                mapElement.style.display = 'none';
+            }
+            // Si el usuario cierra sesión y el mapa está creado, es buena práctica destruirlo
+            if (map) {
+                map.remove();
+                map = null; // Resetear la variable map
+            }
+        }
+    });
+
+    // Hacemos la función login accesible globalmente
+    window.login = function() {
+      const email = document.getElementById('emailInput').value.trim(); // Añade .trim()
+      const password = document.getElementById('passwordInput').value.trim(); // Añade .trim()
+      const loginErrorElement = document.getElementById('loginError'); 
+
+      // Limpiar cualquier mensaje de error previo antes de intentar el login
+      loginErrorElement.textContent = ''; 
+
+      auth.signInWithEmailAndPassword(email, password)
+        .then(() => {
+          // Si el login es exitoso, el onAuthStateChanged se encargará de ocultar el loginContainer
+          loginErrorElement.textContent = ''; // Limpiar mensaje de error si había uno
+        })
+        .catch(error => {
+          console.error("Código de error de Firebase:", error.code); // Para depuración
+
+          // Personaliza el mensaje de error según el código de Firebase
+          if (error.code === 'auth/user-not-found' || 
+              error.code === 'auth/wrong-password' || 
+              error.code === 'auth/invalid-credential' || // Este es el que estás viendo
+              error.code === 'auth/invalid-email' // También es bueno incluir este
+          ) {
+            loginErrorElement.textContent = 'Correo o Contraseña incorrecta.';
+          } else if (error.code === 'auth/user-disabled') {
+            loginErrorElement.textContent = 'Su cuenta ha sido deshabilitada. Contacte al administrador.';
+          } else {
+            // Para cualquier otro error no esperado, puedes mostrar el mensaje genérico de Firebase o uno más técnico
+            loginErrorElement.textContent = 'Ocurrió un error inesperado al iniciar sesión: ' + error.message;
+          }
+        });
+    };
+
+    // Función para alternar la visibilidad de la barra lateral
+    function toggleSidebar() {
+        sidebar.classList.toggle('collapsed');
+        toggleBtn.classList.toggle('sidebar-collapsed');
+        
+        if (sidebar.classList.contains('collapsed')) {
+            toggleBtnText.textContent = 'Mostrar Panel';
+        } else {
+            toggleBtnText.textContent = 'Ocultar Panel';
+        }
+    }
+
+    // Evento para el botón de alternar
+    if (toggleBtn) { // Asegúrate de que el botón existe antes de añadir el listener
+        toggleBtn.addEventListener('click', toggleSidebar);
+    }
+
+    // Añadir atajo de teclado (Ctrl+B) para alternar la barra lateral
+    document.addEventListener('keydown', function(event) {
+        if (event.ctrlKey && event.key === 'b') {
+            event.preventDefault(); // Prevenir comportamiento predeterminado
+            toggleSidebar();
+        }
+    });
 
     function renderDetails(properties) {
-      return `<table>${
-        Object.entries(properties)
-          .map(([key, val]) => `<tr><td>${key}</td><td>${val ?? '-'}</td></tr>`)
-          .join('')
-      }</table>`;
+        return `<table>${
+            Object.entries(properties)
+                .map(([key, val]) => `<tr><td>${key}</td><td>${val ?? '-'}</td></tr>`)
+                .join('')
+        }</table>`;
     }
 
     function updateParcelColors() {
-      if (!map.getLayer('parcelas-layer')) return;
-      const expression = ['match', ['get', 'VINCULACIO']];
-      for (const [id, color] of Object.entries(parcelColors)) {
-        expression.push(id, color);
-      }
-      expression.push('#00aaff');
-      map.setPaintProperty('parcelas-layer', 'fill-color', expression);
+        if (!map || !map.getLayer('parcelas-layer')) return; // Verifica si el mapa y la capa existen
+        const expression = ['match', ['get', 'VINCULACIO']];
+        for (const [id, color] of Object.entries(parcelColors)) {
+            expression.push(id, color);
+        }
+        expression.push('#00aaff');
+        map.setPaintProperty('parcelas-layer', 'fill-color', expression);
     }
 
     async function loadFromFirestore() {
-      const snapshot = await db.collection('parcelas').get();
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        const id = doc.id;
-        parcelColors[id] = data.color || '#00aaff';
-        parcelObservations[id] = data.observacion || '';
-        parcelExtras[id] = {
-          superficie: data.superficie || '',
-          construido: data.construido || '',
-          valor: data.valor || ''
-        };
-      });
+        const snapshot = await db.collection('parcelas').get();
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const id = doc.id;
+            parcelColors[id] = data.color || '#00aaff';
+            parcelObservations[id] = data.observacion || '';
+            parcelExtras[id] = {
+                superficie: data.superficie || '',
+                construido: data.construido || '',
+                valor: data.valor || ''
+            };
+        });
     }
 
     async function saveToFirestore(id, color, observacion, superficie, construido, valor) {
-      await db.collection('parcelas').doc(id).set({
-        color,
-        observacion,
-        superficie,
-        construido,
-        valor
-      });
+        await db.collection('parcelas').doc(id).set({
+            color,
+            observacion,
+            superficie,
+            construido,
+            valor
+        });
     }
 
     async function initMap(styleURL) {
-      const center = map ? map.getCenter() : [-65.4, -24.8];
-      const zoom = map ? map.getZoom() : 15;
+        // Solo inicializa o re-inicializa el mapa si ya estamos logueados
+        if (!auth.currentUser) {
+            console.log("Usuario no logueado, mapa no se inicializa.");
+            return;
+        }
 
-      if (map) map.remove();
+        const center = map ? map.getCenter() : [-65.4, -24.8];
+        const zoom = map ? map.getZoom() : 15;
 
-      map = new mapboxgl.Map({
-        container: 'map',
-        style: styleURL,
-        center: center,
-        zoom: zoom
-      });
+        // Si ya hay un mapa, lo removemos antes de crear uno nuevo para evitar duplicados
+        if (map) map.remove();
 
-      await loadFromFirestore();
-
-      map.on('load', () => {
-        map.addSource('parcelas', {
-          type: 'vector',
-          url: 'mapbox://octaviogalvan5.86x2clxn'
+        map = new mapboxgl.Map({
+            container: 'map', // Asegúrate de que este ID exista en tu HTML
+            style: styleURL,
+            center: center,
+            zoom: zoom
         });
 
-        map.addLayer({
-          id: 'parcelas-layer',
-          type: 'fill',
-          source: 'parcelas',
-          'source-layer': 'archivo-2xi9qg',
-          paint: {
-            'fill-color': ['match', ['get', 'VINCULACIO'], '', '#ff0000', '#ff0000'],
-            'fill-opacity': 0.3
-          }
+        await loadFromFirestore();
+
+        map.on('load', () => {
+            map.addSource('parcelas', {
+                type: 'vector',
+                url: 'mapbox://octaviogalvan5.86x2clxn'
+            });
+
+            map.addLayer({
+                id: 'parcelas-layer',
+                type: 'fill',
+                source: 'parcelas',
+                'source-layer': 'archivo-2xi9qg',
+                paint: {
+                    'fill-color': ['match', ['get', 'VINCULACIO'], '', '#ff0000', '#ff0000'],
+                    'fill-opacity': 0.3
+                }
+            });
+
+            map.addLayer({
+                id: 'selected-parcela',
+                type: 'line',
+                source: 'parcelas',
+                'source-layer': 'archivo-2xi9qg',
+                paint: {
+                    'line-color': '#00aaff',
+                    'line-width': 3
+                },
+                filter: ['==', 'VINCULACIO', '']
+            });
+
+            updateParcelColors();
+
+            map.on('click', 'parcelas-layer', (e) => {
+                const feature = e.features[0];
+                const id = feature.properties.VINCULACIO;
+
+                // Asegúrate de que estos elementos existan en tu HTML
+                document.getElementById('parcelId').textContent = id;
+                document.getElementById('obsInput').value = parcelObservations[id] || '';
+                document.getElementById('colorInput').value = parcelColors[id] || '#ff0000';
+                document.getElementById('supInput').value = parcelExtras[id]?.superficie || '';
+                document.getElementById('consInput').value = parcelExtras[id]?.construido || '';
+                document.getElementById('valorInput').value = parcelExtras[id]?.valor || '';
+                document.getElementById('parcelDetails').innerHTML = renderDetails(feature.properties);
+                document.getElementById('saveBtn').dataset.currentId = id;
+
+                map.setFilter('selected-parcela', ['==', 'VINCULACIO', id]);
+                
+                // Si la barra lateral está oculta, mostrarla al seleccionar una parcela
+                if (sidebar && sidebar.classList.contains('collapsed')) { // Añadido chequeo de sidebar
+                    toggleSidebar();
+                }
+            });
+
+            map.on('mouseenter', 'parcelas-layer', () => {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+            map.on('mouseleave', 'parcelas-layer', () => {
+                map.getCanvas().style.cursor = '';
+            });
         });
-
-        map.addLayer({
-          id: 'selected-parcela',
-          type: 'line',
-          source: 'parcelas',
-          'source-layer': 'archivo-2xi9qg',
-          paint: {
-            'line-color': '#00aaff',
-            'line-width': 3
-          },
-          filter: ['==', 'VINCULACIO', '']
-        });
-
-        updateParcelColors();
-
-        map.on('click', 'parcelas-layer', (e) => {
-          const feature = e.features[0];
-          const id = feature.properties.VINCULACIO;
-
-          document.getElementById('parcelId').textContent = id;
-          document.getElementById('obsInput').value = parcelObservations[id] || '';
-          document.getElementById('colorInput').value = parcelColors[id] || '#ff0000';
-          document.getElementById('supInput').value = parcelExtras[id]?.superficie || '';
-          document.getElementById('consInput').value = parcelExtras[id]?.construido || '';
-          document.getElementById('valorInput').value = parcelExtras[id]?.valor || '';
-          document.getElementById('parcelDetails').innerHTML = renderDetails(feature.properties);
-          document.getElementById('saveBtn').dataset.currentId = id;
-
-          map.setFilter('selected-parcela', ['==', 'VINCULACIO', id]);
-          
-          // Si la barra lateral está oculta, mostrarla al seleccionar una parcela
-          if (sidebar.classList.contains('collapsed')) {
-            toggleSidebar();
-          }
-        });
-
-        map.on('mouseenter', 'parcelas-layer', () => {
-          map.getCanvas().style.cursor = 'pointer';
-        });
-        map.on('mouseleave', 'parcelas-layer', () => {
-          map.getCanvas().style.cursor = '';
-        });
-      });
     }
 
-    initMap('mapbox://styles/mapbox/streets-v11');
+    // *** No llamar a initMap aquí directamente, se manejará con onAuthStateChanged ***
+    // initMap('mapbox://styles/mapbox/streets-v11');
 
-    document.getElementById('saveBtn').addEventListener('click', async () => {
-      const id = document.getElementById('saveBtn').dataset.currentId;
-      if (!id) return;
+    if (document.getElementById('saveBtn')) { // Asegúrate de que el botón exista
+        document.getElementById('saveBtn').addEventListener('click', async () => {
+            const id = document.getElementById('saveBtn').dataset.currentId;
+            if (!id) return;
 
-      const color = document.getElementById('colorInput').value;
-      const observacion = document.getElementById('obsInput').value;
-      const superficie = document.getElementById('supInput').value;
-      const construido = document.getElementById('consInput').value;
-      const valor = document.getElementById('valorInput').value;
+            const color = document.getElementById('colorInput').value;
+            const observacion = document.getElementById('obsInput').value;
+            const superficie = document.getElementById('supInput').value;
+            const construido = document.getElementById('consInput').value;
+            const valor = document.getElementById('valorInput').value;
 
-      parcelColors[id] = color;
-      parcelObservations[id] = observacion;
-      parcelExtras[id] = { superficie, construido, valor };
+            parcelColors[id] = color;
+            parcelObservations[id] = observacion;
+            parcelExtras[id] = { superficie, construido, valor };
 
-      updateParcelColors();
-      await saveToFirestore(id, color, observacion, superficie, construido, valor);
-    });
+            updateParcelColors();
+            await saveToFirestore(id, color, observacion, superficie, construido, valor);
+        });
+    }
 
-    document.getElementById('mapStyle').addEventListener('change', (e) => {
-      const newStyle = e.target.value;
-      initMap(newStyle);
-    });
+    if (document.getElementById('mapStyle')) { // Asegúrate de que el selector exista
+        document.getElementById('mapStyle').addEventListener('change', (e) => {
+            const newStyle = e.target.value;
+            initMap(newStyle);
+        });
+    }
 
-    // Reemplaza el searchBtn existente por este
     function runSearch() {
-      if (!pendingSearch) return;
-      const value = pendingSearch;
-      pendingSearch = null;
-      const resultsList = document.getElementById('searchResults');
-      resultsList.innerHTML = '';
+        if (!pendingSearch || !map) return; // Asegúrate de que el mapa esté inicializado
+        const value = pendingSearch;
+        pendingSearch = null;
+        const resultsList = document.getElementById('searchResults');
+        if (!resultsList) return; // Asegúrate de que la lista de resultados exista
+        resultsList.innerHTML = '';
 
-      const features = map.querySourceFeatures('parcelas', {
-        sourceLayer: 'archivo-2xi9qg'
-      });
+        const features = map.querySourceFeatures('parcelas', {
+            sourceLayer: 'archivo-2xi9qg'
+        });
 
-      const results = features.filter(f =>
-        String(f.properties.CATASTRO).includes(value)
-      );
+        const results = features.filter(f =>
+            String(f.properties.CATASTRO).includes(value)
+        );
 
-      if (results.length === 0) {
-        resultsList.innerHTML = '<li>No se encontraron resultados.</li>';
-        return;
-      }
+        if (results.length === 0) {
+            resultsList.innerHTML = '<li>No se encontraron resultados.</li>';
+            return;
+        }
 
-      results.forEach(feature => {
-        const id = feature.properties.VINCULACIO;
-        const departamento = feature.properties.DEPARTA || '—';
-        const localidad = feature.properties.LOCALID || '—';
-        const catastro = feature.properties.CATASTRO;
+        results.forEach(feature => {
+            const id = feature.properties.VINCULACIO;
+            const departamento = feature.properties.DEPARTA || '—';
+            const localidad = feature.properties.LOCALID || '—';
+            const catastro = feature.properties.CATASTRO;
 
-        const li = document.createElement('li');
-        li.textContent = `Catastro: ${catastro} - Dpto: ${departamento} - Loc: ${localidad}`;
-        li.onclick = () => {
-          const center = turf.center(feature).geometry.coordinates;
-          map.flyTo({ center: center, zoom: 17 });
-          map.setFilter('selected-parcela', ['==', 'VINCULACIO', id]);
-          
-          // Si la barra lateral está oculta, mostrarla al hacer clic en un resultado
-          if (sidebar.classList.contains('collapsed')) {
-            toggleSidebar();
-          }
-        };
-        resultsList.appendChild(li);
-      });
+            const li = document.createElement('li');
+            li.textContent = `Catastro: ${catastro} - Dpto: ${departamento} - Loc: ${localidad}`;
+            li.onclick = () => {
+                // Asegúrate de que Turf.js esté cargado para usar turf.center
+                if (typeof turf !== 'undefined' && turf.center) {
+                    const center = turf.center(feature).geometry.coordinates;
+                    map.flyTo({ center: center, zoom: 17 });
+                } else {
+                    console.warn("Turf.js no está cargado. No se puede centrar el mapa.");
+                }
+                map.setFilter('selected-parcela', ['==', 'VINCULACIO', id]);
+                
+                // Si la barra lateral está oculta, mostrarla al hacer clic en un resultado
+                if (sidebar && sidebar.classList.contains('collapsed')) { // Añadido chequeo de sidebar
+                    toggleSidebar();
+                }
+            };
+            resultsList.appendChild(li);
+        });
     }
 
-    document.getElementById('searchBtn').addEventListener('click', () => {
-      const value = document.getElementById('searchInput').value.trim();
-      if (!value) return;
-      pendingSearch = value;
-      map.once('moveend', runSearch);
-      if (!map.isMoving()) runSearch();
-    });
+    if (document.getElementById('searchBtn')) { // Asegúrate de que el botón exista
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            const searchInput = document.getElementById('searchInput');
+            if (!searchInput) return; // Asegúrate de que el input exista
+            const value = searchInput.value.trim();
+            if (!value) return;
+            pendingSearch = value;
+            // Verifica que el mapa esté inicializado antes de añadir listeners
+            if (map) {
+                map.once('moveend', runSearch);
+                if (!map.isMoving()) runSearch();
+            } else {
+                console.warn("Mapa no inicializado, no se puede realizar la búsqueda.");
+            }
+        });
+    }
     
     // Permitir búsqueda al presionar Enter en el campo de búsqueda
-    document.getElementById('searchInput').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        document.getElementById('searchBtn').click();
-      }
-    });
+    if (document.getElementById('searchInput')) { // Asegúrate de que el input exista
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const searchBtn = document.getElementById('searchBtn');
+                if (searchBtn) { // Asegúrate de que el botón exista
+                    searchBtn.click();
+                }
+            }
+        });
+    }
     
     const deptoCoords = {
-    "Anta": { center: [-64.12472, -24.11361], zoom: 9 },
-    "Cachi": { center: [-66.16519, -25.12033], zoom: 11 },
-    "Cafayate": { center: [-65.97605, -26.07308], zoom: 11 },
-    "Capital": { center: [-65.41056, -24.78917], zoom: 13 },
-    "Cerrillos": { center: [-65.48722, -24.89583], zoom: 13 },
-    "Chicoana": { center: [-65.5344, -25.1046], zoom: 12 },
-    "General Guemes": { center: [-65.05, -24.66667], zoom: 11 },
-    "General San Martin": { center: [-63.83333, -22.5], zoom: 9 },
-    "Guachipas": { center: [-65.5, -25.3], zoom: 12 },
-    "Iruya": { center: [-65.2, -22.8], zoom: 11 },
-    "La Caldera": { center: [-65.3, -24.6], zoom: 12 },
-    "La Candelaria": { center: [-64.1, -25.5], zoom: 11 },
-    "La Poma": { center: [-66.15, -24.7], zoom: 11 },
-    "La Viña": { center: [-65.41667, -25.0], zoom: 12 },
-    "Los Andes": { center: [-67.17, -24.2], zoom: 9 },
-    "Metan": { center: [-64.98, -25.34], zoom: 11 },
-    "Molinos": { center: [-66.32, -25.42], zoom: 11 },
-    "Oran": { center: [-64.34, -23.1], zoom: 10 },
-    "Rivadavia": { center: [-62.93, -24.28], zoom: 8 },
-    "Rosario de la Frontera": { center: [-64.96, -25.8], zoom: 11 },
-    "Rosario de Lerma": { center: [-65.6, -24.94], zoom: 12 },
-    "San Carlos": { center: [-66.03, -26.06], zoom: 11 },
-    "Santa Victoria": { center: [-64.9, -22.53], zoom: 10 }
-  };
-
-    let pendingSearch = null;
+        "Anta": { center: [-64.12472, -24.11361], zoom: 9 },
+        "Cachi": { center: [-66.16519, -25.12033], zoom: 11 },
+        "Cafayate": { center: [-65.97605, -26.07308], zoom: 11 },
+        "Capital": { center: [-65.41056, -24.78917], zoom: 13 },
+        "Cerrillos": { center: [-65.48722, -24.89583], zoom: 13 },
+        "Chicoana": { center: [-65.5344, -25.1046], zoom: 12 },
+        "General Guemes": { center: [-65.05, -24.66667], zoom: 11 },
+        "General San Martin": { center: [-63.83333, -22.5], zoom: 9 },
+        "Guachipas": { center: [-65.5, -25.3], zoom: 12 },
+        "Iruya": { center: [-65.2, -22.8], zoom: 11 },
+        "La Caldera": { center: [-65.3, -24.6], zoom: 12 },
+        "La Candelaria": { center: [-64.1, -25.5], zoom: 11 },
+        "La Poma": { center: [-66.15, -24.7], zoom: 11 },
+        "La Viña": { center: [-65.41667, -25.0], zoom: 12 },
+        "Los Andes": { center: [-67.17, -24.2], zoom: 9 },
+        "Metan": { center: [-64.98, -25.34], zoom: 11 },
+        "Molinos": { center: [-66.32, -25.42], zoom: 11 },
+        "Oran": { center: [-64.34, -23.1], zoom: 10 },
+        "Rivadavia": { center: [-62.93, -24.28], zoom: 8 },
+        "Rosario de la Frontera": { center: [-64.96, -25.8], zoom: 11 },
+        "Rosario de Lerma": { center: [-65.6, -24.94], zoom: 12 },
+        "San Carlos": { center: [-66.03, -26.06], zoom: 11 },
+        "Santa Victoria": { center: [-64.9, -22.53], zoom: 10 }
+    };
 
     // Departamento selector
-    document.getElementById('departamentoSelect').addEventListener('change', (e) => {
-      const depto = e.target.value;
-      if (deptoCoords[depto]) {
-        const { center, zoom } = deptoCoords[depto];
-        map.flyTo({ center, zoom });
-      }
-    });
-  </script>
+    if (document.getElementById('departamentoSelect')) { // Asegúrate de que el selector exista
+        document.getElementById('departamentoSelect').addEventListener('change', (e) => {
+            const depto = e.target.value;
+            if (deptoCoords[depto] && map) { // Asegúrate de que el mapa exista
+                const { center, zoom } = deptoCoords[depto];
+                map.flyTo({ center, zoom });
+            } else if (!map) {
+                console.warn("Mapa no inicializado, no se puede mover a la ubicación del departamento.");
+            }
+        });
+    }
+</script>
 </body>
 </html>
